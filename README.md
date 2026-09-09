@@ -89,6 +89,32 @@ Either way, you only need to scan the QR code once — after that the
 `auth_info/` directory keeps the session alive across restarts (unless the
 linked device gets logged out from the phone side).
 
+### Option C: Railway
+
+Railway logs are plain text, so scanning an ASCII-art QR code from the
+dashboard is unreliable. Pair by code instead:
+
+1. New Service in Railway → **Deploy from GitHub repo** → this repo, branch
+   `claude/whatsapp-agent-capability-h54ivi`. Railway auto-detects Node and
+   runs `npm start`.
+2. Set environment variables in the Railway dashboard:
+   - `ANTHROPIC_API_KEY`
+   - `ALLOWED_NUMBERS`
+   - `PAIRING_PHONE_NUMBER` — the WhatsApp number that will run the agent
+     (country code, no `+`), used only for first-time pairing.
+3. **Add a Volume** mounted at `/app/auth_info` (Settings → Volumes). Without
+   this, every redeploy wipes the paired session and you'd have to re-pair
+   from scratch.
+4. Deploy, then open the deploy logs — a pairing code prints (e.g.
+   `ABCD-1234`). On the phone with that WhatsApp number: **Settings → Linked
+   Devices → Link a Device → Link with phone number instead**, and type the
+   code.
+5. Once paired, you can remove `PAIRING_PHONE_NUMBER` from the env vars —
+   it's only read when no session exists yet.
+
+No exposed port or domain is needed — this runs as a background worker, not
+a web service.
+
 ## Notes
 
 - Group chats are ignored by default (see the `@g.us` check in
