@@ -23,7 +23,30 @@ const ALLOWED_ENTRIES = (process.env.ALLOWED_NUMBERS || '')
   })
 
 const ALLOWED_JIDS = new Set(ALLOWED_ENTRIES.map((e) => e.jid))
-const CONTACTS = new Map(ALLOWED_ENTRIES.filter((e) => e.name).map((e) => [e.name.toLowerCase(), e.jid]))
+
+// The same person can appear under the same name with two JIDs (their real
+// phone-based JID and a "@lid" privacy ID WhatsApp sometimes uses instead).
+// Incoming messages can arrive tagged with either, but replying TO a @lid
+// isn't reliably delivered - only receiving FROM one is. So for both
+// send_message and replying to whoever just messaged, always prefer a
+// phone-based JID for that name when one is listed.
+const NAME_BY_JID = new Map(ALLOWED_ENTRIES.filter((e) => e.name).map((e) => [e.jid, e.name.toLowerCase()]))
+const CONTACTS = new Map()
+for (const e of ALLOWED_ENTRIES) {
+  if (!e.name) continue
+  const key = e.name.toLowerCase()
+  const existing = CONTACTS.get(key)
+  const isPhoneBased = e.jid.endsWith('@s.whatsapp.net')
+  if (!existing || (isPhoneBased && !existing.endsWith('@s.whatsapp.net'))) {
+    CONTACTS.set(key, e.jid)
+  }
+}
+
+function resolveReplyJid(jid) {
+  const name = NAME_BY_JID.get(jid)
+  if (!name) return jid
+  return CONTACTS.get(name) || jid
+}
 
 // Tracks the live socket so the reminder loop below can send proactive
 // messages independent of any incoming message (and picks up the new socket
@@ -107,9 +130,11 @@ async function start() {
         continue
       }
 
+      const replyJid = resolveReplyJid(sender)
+
       try {
-        await sock.sendPresenceUpdate('composing', sender)
-        console.log('[trace] presence sent, calling handleMessage for', sender)
+        await sock.sendPresenceUpdate('composing', replyJid)
+        console.log('[trace] presence sent, calling handleMessage for', sender, '(replying to', replyJid + ')')
         const context = {
           jid: sender,
           contacts: CONTACTS,
@@ -119,11 +144,11 @@ async function start() {
         }
         const reply = await handleMessage(sender, text, context)
         console.log('[trace] handleMessage returned:', reply)
-        await sock.sendMessage(sender, { text: reply })
+        await sock.sendMessage(replyJid, { text: reply })
         console.log('[trace] reply sent successfully')
       } catch (err) {
         console.error('Error handling message:', err)
-        await sock.sendMessage(sender, { text: 'Sorry, something went wrong processing that.' })
+        await sock.sendMessage(replyJid, { text: 'Sorry, something went wrong processing that.' })
       }
     }
   })
@@ -136,7 +161,7 @@ setInterval(async () => {
   try {
     const due = await popDueReminders()
     for (const reminder of due) {
-      await currentSock.sendMessage(reminder.jid, { text: reminder.message })
+      await currentSock.sendMessage(resolveReplyJid(reminder.jid), { text: reminder.message })
     }
   } catch (err) {
     console.error('Error sending due reminders:', err)
