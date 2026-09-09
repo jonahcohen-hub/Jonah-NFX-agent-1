@@ -64,7 +64,17 @@ async function start() {
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
       console.log('Connection closed.', lastDisconnect?.error?.message, '- reconnecting:', shouldReconnect)
-      if (shouldReconnect) start()
+      if (shouldReconnect) {
+        start()
+      } else {
+        // Truly logged out - a new QR/pairing is needed, which requires a
+        // fresh process (the reminder timer below would otherwise keep this
+        // one alive indefinitely with a dead connection and no way to
+        // reconnect). Exiting lets a process manager (pm2/systemd) restart
+        // it cleanly, or hands control back to your terminal.
+        console.log('Logged out - exiting so this can be restarted and re-paired.')
+        process.exit(1)
+      }
     } else if (connection === 'open') {
       console.log('Connected to WhatsApp. Agent is live.')
     }
