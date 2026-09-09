@@ -1,0 +1,17 @@
+[Unit]
+Description=NFX WhatsApp Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Change these two to match your server:
+User=REPLACE_WITH_YOUR_LINUX_USER
+WorkingDirectory=REPLACE_WITH_ABSOLUTE_PATH_TO_REPO
+
+ExecStart=/usr/bin/env node src/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

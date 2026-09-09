@@ -55,6 +55,40 @@ install if you don't want to risk your personal number.
   Add more tools here (calendar, internal APIs, search, etc.) and update the
   `tools` array + `executeTool` switch.
 
+## Deploying for always-on use
+
+Running `npm start` in a terminal only lasts as long as that terminal does.
+For a WhatsApp number people can actually rely on, run it under a process
+manager on a host that stays on (a small VPS, or a spare always-on machine).
+
+### Option A: pm2 (simplest)
+
+```
+npm install -g pm2
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup   # then run the command it prints, once, to enable boot startup
+```
+
+Useful commands: `pm2 logs nfx-whatsapp-agent` (see output / scan the QR code
+on first run), `pm2 restart nfx-whatsapp-agent`, `pm2 stop nfx-whatsapp-agent`.
+
+### Option B: systemd
+
+A template unit file is at `deploy/nfx-whatsapp-agent.service`. Copy it,
+fill in your user and the repo's absolute path, then:
+
+```
+sudo cp deploy/nfx-whatsapp-agent.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now nfx-whatsapp-agent
+journalctl -u nfx-whatsapp-agent -f   # see output / scan the QR code on first run
+```
+
+Either way, you only need to scan the QR code once — after that the
+`auth_info/` directory keeps the session alive across restarts (unless the
+linked device gets logged out from the phone side).
+
 ## Notes
 
 - Group chats are ignored by default (see the `@g.us` check in
@@ -63,5 +97,3 @@ install if you don't want to risk your personal number.
 - History is kept in memory per process; restarting the agent clears
   conversation context (but not saved notes, which persist in
   `notes.json`).
-- For always-on use, run this on a small always-on host (a spare machine,
-  a cheap VPS, etc.) rather than a laptop that sleeps.
