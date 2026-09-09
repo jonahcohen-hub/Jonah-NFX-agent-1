@@ -5,12 +5,15 @@ import qrcode from 'qrcode-terminal'
 import pino from 'pino'
 import { handleMessage } from './agent.js'
 
+// Entries can be a bare phone number (assumed @s.whatsapp.net) or a full JID
+// (e.g. "158892331946229@lid" - WhatsApp's newer privacy ID format, which
+// doesn't map back to a phone number).
 const ALLOWED_JIDS = new Set(
   (process.env.ALLOWED_NUMBERS || '')
     .split(',')
     .map((n) => n.trim())
     .filter(Boolean)
-    .map((n) => `${n}@s.whatsapp.net`)
+    .map((n) => (n.includes('@') ? n : `${n}@s.whatsapp.net`))
 )
 
 async function start() {
