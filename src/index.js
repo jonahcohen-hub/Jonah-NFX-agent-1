@@ -75,6 +75,20 @@ async function start() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // WAMessageStatus: 0=ERROR, 1=PENDING, 2=SERVER_ACK, 3=DELIVERY_ACK, 4=READ.
+  // sock.sendMessage() resolving without error only means the message was
+  // handed to WhatsApp's servers - it says nothing about whether it was
+  // actually delivered. This logs what WhatsApp itself reports back for
+  // each message we send, so we can tell a real delivery problem apart
+  // from a bug in our own code.
+  sock.ev.on('messages.update', (updates) => {
+    for (const u of updates) {
+      if (u.update?.status !== undefined) {
+        console.log('[trace] delivery status for message', u.key?.id, ':', u.update.status)
+      }
+    }
+  })
+
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -144,8 +158,8 @@ async function start() {
         }
         const reply = await handleMessage(sender, text, context)
         console.log('[trace] handleMessage returned:', reply)
-        await sock.sendMessage(replyJid, { text: reply })
-        console.log('[trace] reply sent successfully')
+        const sent = await sock.sendMessage(replyJid, { text: reply })
+        console.log('[trace] sendMessage resolved, message id:', sent?.key?.id, '- watch for delivery status lines that follow')
       } catch (err) {
         console.error('Error handling message:', err)
         await sock.sendMessage(replyJid, { text: 'Sorry, something went wrong processing that.' })
