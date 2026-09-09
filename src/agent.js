@@ -44,12 +44,15 @@ function getTurns(jid) {
 }
 
 export async function handleMessage(jid, text, context) {
+  console.log('[trace] handleMessage: loading histories')
   await loadHistories()
+  console.log('[trace] handleMessage: histories loaded')
 
   const turns = getTurns(jid)
   const priorMessages = turns.flat()
   const currentTurn = [{ role: 'user', content: text }]
 
+  console.log('[trace] handleMessage: calling anthropic, prior message count:', priorMessages.length)
   let response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1024,
@@ -57,6 +60,7 @@ export async function handleMessage(jid, text, context) {
     tools,
     messages: [...priorMessages, ...currentTurn],
   })
+  console.log('[trace] handleMessage: anthropic responded, stop_reason:', response.stop_reason)
 
   while (response.stop_reason === 'tool_use') {
     currentTurn.push({ role: 'assistant', content: response.content })
@@ -64,7 +68,9 @@ export async function handleMessage(jid, text, context) {
     const toolResults = []
     for (const block of response.content) {
       if (block.type !== 'tool_use') continue
+      console.log('[trace] handleMessage: executing tool', block.name)
       const result = await executeTool(block.name, block.input, context)
+      console.log('[trace] handleMessage: tool result', result)
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
@@ -73,6 +79,7 @@ export async function handleMessage(jid, text, context) {
     }
     currentTurn.push({ role: 'user', content: toolResults })
 
+    console.log('[trace] handleMessage: calling anthropic again after tool use')
     response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
@@ -80,6 +87,7 @@ export async function handleMessage(jid, text, context) {
       tools,
       messages: [...priorMessages, ...currentTurn],
     })
+    console.log('[trace] handleMessage: anthropic responded, stop_reason:', response.stop_reason)
   }
 
   currentTurn.push({ role: 'assistant', content: response.content })
@@ -87,7 +95,9 @@ export async function handleMessage(jid, text, context) {
   turns.push(currentTurn)
   while (turns.length > MAX_TURNS) turns.shift()
 
+  console.log('[trace] handleMessage: saving histories')
   await saveHistories()
+  console.log('[trace] handleMessage: histories saved')
 
   const replyText = response.content
     .filter((block) => block.type === 'text')

@@ -109,6 +109,7 @@ async function start() {
 
       try {
         await sock.sendPresenceUpdate('composing', sender)
+        console.log('[trace] presence sent, calling handleMessage for', sender)
         const context = {
           jid: sender,
           contacts: CONTACTS,
@@ -117,7 +118,9 @@ async function start() {
           },
         }
         const reply = await handleMessage(sender, text, context)
+        console.log('[trace] handleMessage returned:', reply)
         await sock.sendMessage(sender, { text: reply })
+        console.log('[trace] reply sent successfully')
       } catch (err) {
         console.error('Error handling message:', err)
         await sock.sendMessage(sender, { text: 'Sorry, something went wrong processing that.' })
