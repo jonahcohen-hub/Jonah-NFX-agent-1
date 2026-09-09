@@ -81,7 +81,7 @@ async function start() {
   })
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    console.log(`messages.upsert fired: type=${type}, count=${messages.length}`)
+    if (type !== 'notify') return
 
     for (const msg of messages) {
       if (msg.key.fromMe) continue
@@ -94,8 +94,18 @@ async function start() {
         continue
       }
 
-      const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ''
-      if (!text) continue
+      // Disappearing messages (and a couple of other wrappers) nest the
+      // actual content one level deeper instead of at the top level.
+      const inner =
+        msg.message?.ephemeralMessage?.message ||
+        msg.message?.viewOnceMessage?.message ||
+        msg.message?.viewOnceMessageV2?.message ||
+        msg.message
+      const text = inner?.conversation || inner?.extendedTextMessage?.text || ''
+      if (!text) {
+        console.log('No plain text found in message, keys:', msg.message ? Object.keys(msg.message) : msg.message)
+        continue
+      }
 
       try {
         await sock.sendPresenceUpdate('composing', sender)
