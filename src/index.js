@@ -81,7 +81,7 @@ async function start() {
   })
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return
+    console.log(`messages.upsert fired: type=${type}, count=${messages.length}`)
 
     for (const msg of messages) {
       if (msg.key.fromMe) continue
