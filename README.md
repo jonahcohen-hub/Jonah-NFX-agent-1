@@ -51,9 +51,13 @@ install if you don't want to risk your personal number.
 - `src/agent.js` — runs the Claude conversation/tool-use loop, keeping a
   short rolling history per sender.
 - `src/tools.js` — example tools (`get_current_datetime`, `add_note`,
-  `list_notes`) showing the pattern for giving the agent real capabilities.
-  Add more tools here (calendar, internal APIs, search, etc.) and update the
-  `tools` array + `executeTool` switch.
+  `list_notes`, `schedule_reminder`) showing the pattern for giving the agent
+  real capabilities. Add more tools here (calendar, internal APIs, search,
+  etc.) and update the `tools` array + `executeTool` switch.
+- `schedule_reminder` lets the agent message *you* proactively (e.g. "remind
+  me in 20 minutes to call X"), not just reply to incoming messages. A timer
+  in `src/index.js` checks every 30 seconds for due reminders and sends them
+  through the live WhatsApp connection.
 
 ## Deploying for always-on use
 

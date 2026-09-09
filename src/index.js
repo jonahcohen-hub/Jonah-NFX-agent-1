@@ -4,6 +4,7 @@ import { Boom } from '@hapi/boom'
 import qrcode from 'qrcode-terminal'
 import pino from 'pino'
 import { handleMessage } from './agent.js'
+import { popDueReminders } from './tools.js'
 
 // Entries can be a bare phone number (assumed @s.whatsapp.net) or a full JID
 // (e.g. "158892331946229@lid" - WhatsApp's newer privacy ID format, which
@@ -16,6 +17,11 @@ const ALLOWED_JIDS = new Set(
     .map((n) => (n.includes('@') ? n : `${n}@s.whatsapp.net`))
 )
 
+// Tracks the live socket so the reminder loop below can send proactive
+// messages independent of any incoming message (and picks up the new socket
+// automatically after a reconnect).
+let currentSock = null
+
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info')
 
@@ -24,6 +30,7 @@ async function start() {
     printQRInTerminal: false,
     logger: pino({ level: 'silent' }),
   })
+  currentSock = sock
 
   // On a host with no camera-friendly QR display (e.g. reading logs in a
   // cloud dashboard), pair by code instead: set PAIRING_PHONE_NUMBER to the
@@ -83,5 +90,19 @@ async function start() {
     }
   })
 }
+
+// Checks for due reminders on a timer, independent of incoming messages, so
+// the agent can message people proactively rather than only reacting.
+setInterval(async () => {
+  if (!currentSock) return
+  try {
+    const due = await popDueReminders()
+    for (const reminder of due) {
+      await currentSock.sendMessage(reminder.jid, { text: reminder.message })
+    }
+  } catch (err) {
+    console.error('Error sending due reminders:', err)
+  }
+}, 30_000)
 
 start()
