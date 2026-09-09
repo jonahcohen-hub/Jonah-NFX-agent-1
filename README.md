@@ -26,9 +26,11 @@ install if you don't want to risk your personal number.
    ```
    Fill in:
    - `ANTHROPIC_API_KEY` — your Claude API key.
-   - `ALLOWED_NUMBERS` — comma-separated phone numbers (country code, digits
-     only, e.g. `15551234567`) for the 3-4 team members allowed to use the
-     agent. Anyone else who messages the number is ignored.
+   - `ALLOWED_NUMBERS` — comma-separated entries for the people allowed to
+     use the agent, e.g. `Jonah:15551234567,Sarah:15559876543`. The `Name:`
+     part is optional but lets the agent address that person by name via
+     `send_message` (see below); a bare number/JID still works, it just
+     can't be targeted by name. Anyone not listed is ignored.
 
 3. **Run it**
    ```
@@ -51,13 +53,21 @@ install if you don't want to risk your personal number.
 - `src/agent.js` — runs the Claude conversation/tool-use loop, keeping a
   short rolling history per sender.
 - `src/tools.js` — example tools (`get_current_datetime`, `add_note`,
-  `list_notes`, `schedule_reminder`) showing the pattern for giving the agent
-  real capabilities. Add more tools here (calendar, internal APIs, search,
-  etc.) and update the `tools` array + `executeTool` switch.
+  `list_notes`, `schedule_reminder`, `list_contacts`, `send_message`)
+  showing the pattern for giving the agent real capabilities. Add more tools
+  here (calendar, internal APIs, search, etc.) and update the `tools` array
+  + `executeTool` switch.
 - `schedule_reminder` lets the agent message *you* proactively (e.g. "remind
   me in 20 minutes to call X"), not just reply to incoming messages. A timer
   in `src/index.js` checks every 30 seconds for due reminders and sends them
   through the live WhatsApp connection.
+- `send_message` lets the agent message someone *else* on request (e.g.
+  "tell Sarah I'm running late"), but **only** people listed by name in
+  `ALLOWED_NUMBERS` — it refuses any other name or number, so it can't be
+  used to message strangers. `list_contacts` tells the agent (and you, if
+  you ask) who's currently addressable this way.
+- Conversation history persists to `histories.json` per sender, so context
+  survives restarts (trimmed to the last ~20 messages per person).
 
 ## Deploying for always-on use
 

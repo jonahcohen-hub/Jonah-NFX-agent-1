@@ -82,15 +82,35 @@ export const tools = [
       required: ['minutes_from_now', 'message'],
     },
   },
+  {
+    name: 'list_contacts',
+    description: "List the names of approved contacts this agent is allowed to message on the user's behalf.",
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'send_message',
+    description:
+      'Send a WhatsApp message to another approved contact by name, on behalf of the current user (e.g. "tell Sarah I\'m running late"). Only works for names returned by list_contacts - refuses anyone else.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: "The approved contact's name to send the message to." },
+        message: { type: 'string', description: 'The message text to send them.' },
+      },
+      required: ['to', 'message'],
+    },
+  },
 ]
 
-export async function executeTool(name, input, jid) {
+// context = { jid, contacts: Map<name, jid>, sendMessage: (toJid, text) => Promise }
+// passed in from index.js, which owns the live WhatsApp connection.
+export async function executeTool(name, input, context) {
   switch (name) {
     case 'get_current_datetime':
       return new Date().toString()
     case 'add_note': {
       const notes = await readNotes()
-      notes.push({ text: input.text, from: jid, at: new Date().toISOString() })
+      notes.push({ text: input.text, from: context.jid, at: new Date().toISOString() })
       await writeNotes(notes)
       return 'Note saved.'
     }
@@ -105,13 +125,27 @@ export async function executeTool(name, input, jid) {
       const reminders = await readReminders()
       reminders.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        jid,
+        jid: context.jid,
         message: input.message,
         dueAt,
         sent: false,
       })
       await writeReminders(reminders)
       return `Reminder scheduled for ${new Date(dueAt).toLocaleString()}.`
+    }
+    case 'list_contacts': {
+      const names = [...context.contacts.keys()]
+      return names.length > 0
+        ? names.join(', ')
+        : 'No named contacts configured yet (add "Name:number" entries to ALLOWED_NUMBERS).'
+    }
+    case 'send_message': {
+      const targetJid = context.contacts.get(String(input.to).trim().toLowerCase())
+      if (!targetJid) {
+        return `"${input.to}" is not an approved contact. Use list_contacts to see who's available.`
+      }
+      await context.sendMessage(targetJid, input.message)
+      return `Message sent to ${input.to}.`
     }
     default:
       return `Unknown tool: ${name}`

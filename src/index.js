@@ -6,16 +6,24 @@ import pino from 'pino'
 import { handleMessage } from './agent.js'
 import { popDueReminders } from './tools.js'
 
-// Entries can be a bare phone number (assumed @s.whatsapp.net) or a full JID
-// (e.g. "158892331946229@lid" - WhatsApp's newer privacy ID format, which
-// doesn't map back to a phone number).
-const ALLOWED_JIDS = new Set(
-  (process.env.ALLOWED_NUMBERS || '')
-    .split(',')
-    .map((n) => n.trim())
-    .filter(Boolean)
-    .map((n) => (n.includes('@') ? n : `${n}@s.whatsapp.net`))
-)
+// Each entry is either a bare number/JID ("972501234567" or
+// "158892331946229@lid" - WhatsApp's newer privacy ID format that doesn't
+// map back to a phone number), or "Name:number" to also make that contact
+// addressable by name via the send_message tool.
+const ALLOWED_ENTRIES = (process.env.ALLOWED_NUMBERS || '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean)
+  .map((entry) => {
+    const separatorIndex = entry.indexOf(':')
+    const name = separatorIndex === -1 ? null : entry.slice(0, separatorIndex).trim()
+    const raw = separatorIndex === -1 ? entry : entry.slice(separatorIndex + 1).trim()
+    const jid = raw.includes('@') ? raw : `${raw}@s.whatsapp.net`
+    return { name, jid }
+  })
+
+const ALLOWED_JIDS = new Set(ALLOWED_ENTRIES.map((e) => e.jid))
+const CONTACTS = new Map(ALLOWED_ENTRIES.filter((e) => e.name).map((e) => [e.name.toLowerCase(), e.jid]))
 
 // Tracks the live socket so the reminder loop below can send proactive
 // messages independent of any incoming message (and picks up the new socket
@@ -81,7 +89,14 @@ async function start() {
 
       try {
         await sock.sendPresenceUpdate('composing', sender)
-        const reply = await handleMessage(sender, text)
+        const context = {
+          jid: sender,
+          contacts: CONTACTS,
+          sendMessage: async (toJid, messageText) => {
+            await sock.sendMessage(toJid, { text: messageText })
+          },
+        }
+        const reply = await handleMessage(sender, text, context)
         await sock.sendMessage(sender, { text: reply })
       } catch (err) {
         console.error('Error handling message:', err)
